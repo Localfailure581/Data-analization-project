@@ -1,48 +1,75 @@
-print("Welcome to data analysis bot, this project is to help me get a better understanding data base files in python.")
+import os
+import shutil
+import time
 
-launch_options = ["store data", "advanced commands"]
-options = ["integer", "sentence", "password"]
+import db
+import models
 
-while True:
-    action_to_take = input(f"Would you like to {launch_options[0]} or see {launch_options[1]}? ")
 
-    if action_to_take.lower() == launch_options[0]:
-        print("You have selected Store Data, please enter 'back' to go back to the previous selection")
+def get_float_input(prompt):
+    while True:
+        user_input = input(prompt)
+        try:
+            value = float(user_input)
+            return value
+        except ValueError:
+            print("Invalid input. Please enter a number.")
 
-        while True:
-            # Prompt user for the type of information to store
-            info_type = input(f"What type of info would you like to store? {options}. Type 'exit' to quit. ")
 
-            # Check if the user wants to exit
-            if info_type.lower() == "exit":
-                print("Exiting data analysis bot.")
-                break
-            elif info_type.lower() == "back":
-                break
+def main():
+    print("Welcome to funding report creator, a process created to generate funding reports based on user input via terminal")
 
-            # Check if the input is a valid option
-            if info_type.lower() not in options:
-                print("This is not a valid option type.")
-                continue
+    # Get the net income
+    while True:
+        income = get_float_input("How much did the parent company make this month? ")
+        confirmation = input(f"Ok, so the server pulled in ${income:.2f}? [Y/N] ")
+        if confirmation.upper() == "Y":
+            break
 
-            # Prompt user for the information to store
-            info_to_store = input("Enter the information you'd like to store: ")
+    # Get the expenses
+    expenses = []
+    while True:
+        expense_name = input("Enter an expense name (or 'done' if finished): ")
+        if expense_name.lower() == "done":
+            break
+        expense_value = get_float_input(f"Enter the value for '{expense_name}': ")
+        expenses.append(models.Expense(expense_name, expense_value))
+        db.insert_expense(expense_name, expense_value)
 
-            # Open a file for appending (creates a new file if it doesn't exist)
-            with open("data.txt", "a") as f:
-                # Check if the file already has information, if so, write to a new line
-                if f.tell() != 0:
-                    f.write("\n")
-                # Write the stored information to the file
-                f.write(f"{info_type}: {info_to_store}")
+    # Get the current savings
+    while True:
+        current_savings = get_float_input("How much is currently saved? ")
+        if current_savings < 0:
+            print("Invalid input. Please enter a non negative number.")
+            continue
+        break
 
-            # Print out a message to confirm that the information was successfully stored
-            print("Information stored in file.")
+    # Calculate the total expenses
+    total_expenses = sum([expense.value for expense in expenses])
 
-    elif action_to_take.lower() == launch_options[1]:
-        print(""""*feature not currently in use*" You have selected Advanced Commands, please enter 'back' to go back to the previous selection""")
+    # Calculate the amount used from savings
+    amount_used = max(0, total_expenses - income)
 
-        # Add advanced commands here
+    # Update the current savings
+    current_savings -= amount_used
 
-    else:
-        print("Invalid option. Please try again.")
+    # Save the current savings to the database
+    db.insert_savings(current_savings)
+
+    # Print the report
+    report = (f"NVS February funding\n"
+              f"+${income:.2f} incoming (patrons)\n"
+              f"-${total_expenses:.2f} total expenses\n"
+              f"Used from NVS savings: ${amount_used:.2f}\n"
+              f"Current savings: ${current_savings:.2f}")
+    print(report)
+
+    # Save the report to a file with a timestamp in the file name
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    filename = f"archives/funding_report_{timestamp}.txt"
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    with open(filename, "w") as file:
+        file.write(report)
+
+    # Move the report to the archives folder
+    shutil.move(filename, "archives")
